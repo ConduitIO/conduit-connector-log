@@ -1,7 +1,7 @@
 .PHONY: build test test-integration
 
 build:
-	go build -o conduit-connector-connectorName cmd/connector/main.go
+	go build -o conduit-connector-log cmd/connector/main.go
 
 test:
 	go test $(GOTEST_FLAGS) -v -race ./...

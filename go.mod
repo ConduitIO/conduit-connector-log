@@ -1,4 +1,4 @@
-module github.com/conduitio/conduit-connector-connectorName
+module conduitio/conduit-connector-log
 
 go 1.19
 
