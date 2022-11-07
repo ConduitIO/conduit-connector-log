@@ -2,7 +2,11 @@ module conduitio/conduit-connector-log
 
 go 1.19
 
-require github.com/conduitio/conduit-connector-sdk v0.3.0
+require (
+	github.com/conduitio/conduit-connector-sdk v0.3.0
+	github.com/matryer/is v1.4.0
+	github.com/rs/zerolog v1.28.0
+)
 
 require (
 	github.com/conduitio/conduit-connector-protocol v0.3.0 // indirect
@@ -12,12 +16,10 @@ require (
 	github.com/hashicorp/go-plugin v1.4.3 // indirect
 	github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
-	github.com/matryer/is v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/oklog/run v1.0.0 // indirect
-	github.com/rs/zerolog v1.28.0 // indirect
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.3.3 // indirect
 	go.uber.org/goleak v1.2.0 // indirect
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect

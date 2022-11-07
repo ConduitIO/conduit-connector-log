@@ -14,6 +14,14 @@ Run `make test` to run all the unit tests.
 
 The destination connector logs records using the built-in Conduit logger.
 
+Example log message:
+```
+{"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
+```
+
+Note that Conduit's log level needs to be configured lower or equal to the log
+level of the connector in order for the records to show up in the logs.
+
 ### Configuration
 
 | name    | description                                    | required | default value |
