@@ -19,8 +19,11 @@ Example log message:
 {"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
 ```
 
-Note that Conduit's log level needs to be configured lower or equal to the log
-level of the connector in order for the records to show up in the logs.
+Note that the `position` field is base64 encoded, same goes for a key or payload
+that contains raw byte data.
+
+Keep in mind that Conduit's log level needs to be configured lower or equal to
+the log level of the connector in order for the records to show up in the logs.
 
 ### Configuration
 
