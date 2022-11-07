@@ -15,9 +15,8 @@
 package main
 
 import (
+	log "github.com/conduitio/conduit-connector-log"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-
-	log "conduitio/conduit-connector-log"
 )
 
 func main() {
