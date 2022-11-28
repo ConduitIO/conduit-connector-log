@@ -24,14 +24,16 @@ import (
 )
 
 const (
-	ConfigLevel  = "level"
-	LevelDefault = zerolog.InfoLevel
+	ConfigLevel   = "level"
+	LevelDefault  = zerolog.InfoLevel
+	ConfigMessage = "message"
 )
 
 type Destination struct {
 	sdk.UnimplementedDestination
 
 	level zerolog.Level
+	msg   string
 }
 
 func NewDestination() sdk.Destination {
@@ -42,8 +44,12 @@ func (d *Destination) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
 		ConfigLevel: {
 			Default:     "INFO",
-			Required:    true,
+			Required:    false,
 			Description: "The log level used to log records.",
+		},
+		ConfigMessage: {
+			Required:    false,
+			Description: "Optional message that should be added to the log output of every record.",
 		},
 	}
 }
@@ -61,6 +67,7 @@ func (d *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 		}
 	}
 	d.level = level
+	d.msg = cfg[ConfigMessage]
 	return nil
 }
 
@@ -73,7 +80,7 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 	for _, r := range records {
 		logger.WithLevel(d.level).
 			RawJSON("record", r.Bytes()).
-			Send()
+			Msg(d.msg)
 	}
 	return len(records), nil
 }
