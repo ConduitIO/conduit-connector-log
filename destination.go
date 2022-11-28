@@ -44,7 +44,7 @@ func (d *Destination) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
 		ConfigLevel: {
 			Default:     "INFO",
-			Required:    true,
+			Required:    false,
 			Description: "The log level used to log records.",
 		},
 		ConfigMessage: {
