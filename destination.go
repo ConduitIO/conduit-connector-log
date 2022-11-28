@@ -67,7 +67,7 @@ func (d *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 		}
 	}
 	d.level = level
-	d.msg, _ = cfg[ConfigMessage]
+	d.msg = cfg[ConfigMessage]
 	return nil
 }
 
