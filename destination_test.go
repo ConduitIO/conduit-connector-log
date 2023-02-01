@@ -95,8 +95,8 @@ func TestDestination_Configure_Write(t *testing.T) {
 	}}
 
 	want := []string{
-		`{"level":"warn","record":{"position":"cjE=","operation":"create","metadata":{"foo1":"bar1","opencdc.version":"v1"},"key":"cmF3LWtleQ==","payload":{"before":null,"after":"cmF3LXBheWxvYWQ="}},"message":"foo!"}`,
-		`{"level":"warn","record":{"position":"cjI=","operation":"update","metadata":{"foo2":"bar2","opencdc.version":"v1"},"key":{"r2-key":1},"payload":{"before":{"r2-payload":true},"after":{"r2-payload":false}}},"message":"foo!"}`,
+		`{"level":"warn","record":{"position":"cjE=","operation":"create","metadata":{"foo1":"bar1"},"key":"cmF3LWtleQ==","payload":{"before":null,"after":"cmF3LXBheWxvYWQ="}},"message":"foo!"}`,
+		`{"level":"warn","record":{"position":"cjI=","operation":"update","metadata":{"foo2":"bar2"},"key":{"r2-key":1},"payload":{"before":{"r2-payload":true},"after":{"r2-payload":false}}},"message":"foo!"}`,
 	}
 
 	l, err := dest.Write(ctx, have)
