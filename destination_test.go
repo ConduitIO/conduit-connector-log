@@ -44,7 +44,7 @@ func TestDestination_Configure_Success(t *testing.T) {
 	}
 
 	for have, want := range testCases {
-		t.Run(have, func(t *testing.T) {
+		t.Run(have, func(_ *testing.T) {
 			var dest Destination
 			err := dest.Configure(ctx, map[string]string{"level": have})
 			is.NoErr(err)

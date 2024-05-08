@@ -54,7 +54,7 @@ func (d *Destination) Parameters() map[string]sdk.Parameter {
 	}
 }
 
-func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
+func (d *Destination) Configure(_ context.Context, cfg map[string]string) error {
 	level := LevelDefault
 	if l := cfg[ConfigLevel]; l != "" {
 		var err error
@@ -71,7 +71,7 @@ func (d *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 	return nil
 }
 
-func (d *Destination) Open(ctx context.Context) error {
+func (d *Destination) Open(_ context.Context) error {
 	return nil // nothing to open
 }
 
@@ -85,6 +85,6 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 	return len(records), nil
 }
 
-func (d *Destination) Teardown(ctx context.Context) error {
+func (d *Destination) Teardown(_ context.Context) error {
 	return nil // nothing to tear down
 }
