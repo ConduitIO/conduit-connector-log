@@ -1,5 +1,3 @@
-.PHONY: build test
-
 VERSION=$(shell git describe --tags --dirty --always)
 
 .PHONY: build
