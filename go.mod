@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit-connector-log
 
-go 1.22.1
+go 1.22.2
 
 require (
 	github.com/conduitio/conduit-connector-sdk v0.9.1
