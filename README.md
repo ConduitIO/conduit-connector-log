@@ -29,5 +29,5 @@ the log level of the connector in order for the records to show up in the logs.
 
 | name      | description                                                              | required | default value |
 |-----------|--------------------------------------------------------------------------|----------|---------------|
-| `level`   | Log level (ERROR, WARN, INFO, DEBUG or TRACE).                           | false    | INFO          |
+| `level`   | Log level (error, warn, info, debug or trace).                           | false    | info          |
 | `message` | Optional message that should be added to the log output of every record. | false    |               |
