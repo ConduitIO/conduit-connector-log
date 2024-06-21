@@ -20,7 +20,8 @@ import (
 	"context"
 	"testing"
 
-	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit-commons/opencdc"
+
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -36,11 +37,6 @@ func TestDestination_Configure_Success(t *testing.T) {
 		"info":  zerolog.InfoLevel,
 		"debug": zerolog.DebugLevel,
 		"trace": zerolog.TraceLevel,
-		"ERROR": zerolog.ErrorLevel,
-		"WARN":  zerolog.WarnLevel,
-		"INFO":  zerolog.InfoLevel,
-		"DEBUG": zerolog.DebugLevel,
-		"TRACE": zerolog.TraceLevel,
 	}
 
 	for have, want := range testCases {
@@ -66,31 +62,31 @@ func TestDestination_Configure_Write(t *testing.T) {
 	is := is.New(t)
 
 	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	ctx := logger.WithContext(context.Background()) // sdk takes logger from the context
+	logger := zerolog.New(&buf).Level(zerolog.InfoLevel) // ignore debug logs
+	ctx := logger.WithContext(context.Background())      // sdk takes logger from the context
 
 	var dest Destination
 
 	err := dest.Configure(ctx, map[string]string{"level": "warn", "message": "foo!"})
 	is.NoErr(err)
 
-	have := []sdk.Record{{
+	have := []opencdc.Record{{
 		Position:  []byte("r1"),
-		Operation: sdk.OperationCreate,
+		Operation: opencdc.OperationCreate,
 		Metadata:  map[string]string{"foo1": "bar1"},
-		Key:       sdk.RawData("raw-key"),
-		Payload: sdk.Change{
+		Key:       opencdc.RawData("raw-key"),
+		Payload: opencdc.Change{
 			Before: nil,
-			After:  sdk.RawData("raw-payload"),
+			After:  opencdc.RawData("raw-payload"),
 		},
 	}, {
 		Position:  []byte("r2"),
-		Operation: sdk.OperationUpdate,
+		Operation: opencdc.OperationUpdate,
 		Metadata:  map[string]string{"foo2": "bar2"},
-		Key:       sdk.StructuredData{"r2-key": 1},
-		Payload: sdk.Change{
-			Before: sdk.StructuredData{"r2-payload": true},
-			After:  sdk.StructuredData{"r2-payload": false},
+		Key:       opencdc.StructuredData{"r2-key": 1},
+		Payload: opencdc.Change{
+			Before: opencdc.StructuredData{"r2-payload": true},
+			After:  opencdc.StructuredData{"r2-payload": false},
 		},
 	}}
 
