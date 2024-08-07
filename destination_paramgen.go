@@ -7,9 +7,14 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 )
 
+const (
+	DestinationConfigLevel   = "level"
+	DestinationConfigMessage = "message"
+)
+
 func (DestinationConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		"level": {
+		DestinationConfigLevel: {
 			Default:     "info",
 			Description: "The log level used to log records.",
 			Type:        config.ParameterTypeString,
@@ -17,7 +22,7 @@ func (DestinationConfig) Parameters() map[string]config.Parameter {
 				config.ValidationInclusion{List: []string{"trace", "debug", "info", "warn", "error"}},
 			},
 		},
-		"message": {
+		DestinationConfigMessage: {
 			Default:     "",
 			Description: "Optional message that should be added to the log output of every record.",
 			Type:        config.ParameterTypeString,
