@@ -39,7 +39,7 @@ while true; do
         [Yy]* )
             BRANCH_NAME="update-version-$V_TAG"
             git checkout -b "$BRANCH_NAME"
-	          yq e ".specification.version = \"$(V_TAG)\"" -i connector.yaml
+	          yq e ".specification.version = \"$V_TAG\"" -i connector.yaml
 	          git commit -am "Update version to $V_TAG"
             git push origin "$BRANCH_NAME"
 
