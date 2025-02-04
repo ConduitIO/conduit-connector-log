@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -42,9 +42,16 @@ func TestDestination_Configure_Success(t *testing.T) {
 	for have, want := range testCases {
 		t.Run(have, func(_ *testing.T) {
 			var dest Destination
-			err := dest.Configure(ctx, map[string]string{"level": have})
+			err := sdk.Util.ParseConfig(
+				ctx,
+				map[string]string{"level": have},
+				dest.Config(),
+				Connector.NewSpecification().DestinationParams,
+			)
 			is.NoErr(err)
-			is.Equal(dest.level, want)
+			level, err := dest.config.LogLevel()
+			is.NoErr(err)
+			is.Equal(level, want)
 		})
 	}
 }
@@ -54,7 +61,12 @@ func TestDestination_Configure_Fail(t *testing.T) {
 	ctx := context.Background()
 
 	var dest Destination
-	err := dest.Configure(ctx, map[string]string{"level": "invalid"})
+	err := sdk.Util.ParseConfig(
+		ctx,
+		map[string]string{"level": "invalid"},
+		dest.Config(),
+		Connector.NewSpecification().DestinationParams,
+	)
 	is.True(err != nil)
 }
 
@@ -67,7 +79,12 @@ func TestDestination_Configure_Write(t *testing.T) {
 
 	var dest Destination
 
-	err := dest.Configure(ctx, map[string]string{"level": "warn", "message": "foo!"})
+	err := sdk.Util.ParseConfig(
+		ctx,
+		map[string]string{"level": "warn", "message": "foo!"},
+		dest.Config(),
+		Connector.NewSpecification().DestinationParams,
+	)
 	is.NoErr(err)
 
 	have := []opencdc.Record{{

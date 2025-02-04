@@ -1,0 +1,91 @@
+version: "1.0"
+specification:
+  name: log
+  summary: A destination connector that logs all incoming records.
+  description: |
+    ## Destination
+
+    The destination connector logs records using the built-in Conduit logger.
+
+    Example log message:
+
+    ```
+    {"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
+    ```
+
+    Note that the `position` field is base64 encoded, same goes for a key or payload
+    that contains raw byte data.
+
+    Keep in mind that Conduit's log level needs to be configured lower or equal to
+    the log level of the connector in order for the records to show up in the logs.
+  version: v0.7.0-dev
+  author: Meroxa, Inc.
+  destination:
+    parameters:
+      - name: level
+        description: The log level used to log records.
+        type: string
+        default: info
+        validations:
+          - type: inclusion
+            value: trace,debug,info,warn,error
+      - name: message
+        description: Optional message that should be added to the log output of every record.
+        type: string
+        default: ""
+        validations: []
+      - name: sdk.batch.delay
+        description: Maximum delay before an incomplete batch is written to the destination.
+        type: duration
+        default: "0"
+        validations: []
+      - name: sdk.batch.size
+        description: Maximum size of batch before it gets written to the destination.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.burst
+        description: |-
+          Allow bursts of at most X records (0 or less means that bursts are not
+          limited). Only takes effect if a rate limit per second is set. Note that
+          if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch
+          size will be equal to `sdk.rate.burst`.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.perSecond
+        description: Maximum number of records written per second (0 means no rate limit).
+        type: float
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.record.format
+        description: |-
+          The format of the output record. See the Conduit documentation for a full
+          list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format).
+        type: string
+        default: opencdc/json
+        validations: []
+      - name: sdk.record.format.options
+        description: |-
+          Options to configure the chosen output record format. Options are normally
+          key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except
+          for the `template` record format, where options are a Go template.
+        type: string
+        default: ""
+        validations: []
+      - name: sdk.schema.extract.key.enabled
+        description: Whether to extract and decode the record key with a schema.
+        type: bool
+        default: "true"
+        validations: []
+      - name: sdk.schema.extract.payload.enabled
+        description: Whether to extract and decode the record payload with a schema.
+        type: bool
+        default: "true"
+        validations: []
