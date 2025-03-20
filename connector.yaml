@@ -18,7 +18,7 @@ specification:
 
     Keep in mind that Conduit's log level needs to be configured lower or equal to
     the log level of the connector in order for the records to show up in the logs.
-  version: v0.7.0
+  version: v0.7.1
   author: Meroxa, Inc.
   destination:
     parameters:
