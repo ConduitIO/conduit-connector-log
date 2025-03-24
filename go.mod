@@ -7,7 +7,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.13.3
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/matryer/is v1.4.1
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 )
 
 require (
