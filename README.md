@@ -18,6 +18,11 @@ that contains raw byte data.
 
 Keep in mind that Conduit's log level needs to be configured lower or equal to
 the log level of the connector in order for the records to show up in the logs.
+
+### Known issues
+
+- **Only when using as a [standalone connector](https://conduit.io/docs/core-concepts#standalone-connector)**: Messages larger than 64KB will not be logged when using `log.level` as `info`.
+  This is a known issue caused by the default buffer value of `go-plugin`. More information can be found in [this comment](https://github.com/ConduitIO/conduit-connector-log/issues/81#issuecomment-2904224580).
 <!-- /readmegen:description -->
 
 ## Configuration
