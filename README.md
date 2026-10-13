@@ -36,6 +36,7 @@ pipelines:
     connectors:
       - id: example
         plugin: "log"
+        type: destination
         settings:
           # The log level used to log records.
           # Type: string
