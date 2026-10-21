@@ -7,14 +7,26 @@ specification:
 
     The destination connector logs records using the built-in Conduit logger.
 
-    Example log message:
+    By default a record is logged **without its key or payload**: only the position
+    (base64 encoded), the operation, a SHA-256 hash of the key and the metadata are
+    written. This keeps record data out of logs, which matters because Conduit's
+    default dead-letter queue writes through this connector. Set `payload: true` to
+    log the full record.
+
+    Example log message (default):
+
+    ```
+    {"level":"info","position":"cjI=","operation":"create","key_sha256":"5f...","metadata":{"foo":"bar","opencdc.version":"v1"}}
+    ```
+
+    Example log message with `payload: true`:
 
     ```
     {"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
     ```
 
-    Note that the `position` field is base64 encoded, same goes for a key or payload
-    that contains raw byte data.
+    With `payload: true`, the `position` field is base64 encoded, same goes for a key
+    or payload that contains raw byte data.
 
     Keep in mind that Conduit's log level needs to be configured lower or equal to
     the log level of the connector in order for the records to show up in the logs.
@@ -38,6 +50,16 @@ specification:
         description: Optional message that should be added to the log output of every record.
         type: string
         default: ""
+        validations: []
+      - name: payload
+        description: |-
+          Log the full record, including key and payload. Disabled by default
+          because log output is commonly shipped to systems that are not
+          authorized to read record data (the default Conduit DLQ writes through
+          this connector). When disabled, only the position, operation, a SHA-256
+          hash of the key and the metadata are logged.
+        type: bool
+        default: "false"
         validations: []
       - name: sdk.batch.delay
         description: Maximum delay before an incomplete batch is written to the destination.
