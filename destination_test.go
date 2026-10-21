@@ -18,6 +18,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -81,7 +84,7 @@ func TestDestination_Configure_Write(t *testing.T) {
 
 	err := sdk.Util.ParseConfig(
 		ctx,
-		map[string]string{"level": "warn", "message": "foo!"},
+		map[string]string{"level": "warn", "message": "foo!", "payload": "true"},
 		dest.Config(),
 		Connector.NewSpecification().DestinationParams,
 	)
@@ -122,4 +125,60 @@ func TestDestination_Configure_Write(t *testing.T) {
 		is.Equal(scanner.Text(), want[i])
 		i++
 	}
+}
+
+func newTestRecords() []opencdc.Record {
+	return []opencdc.Record{{
+		Position:  []byte("r1"),
+		Operation: opencdc.OperationCreate,
+		Metadata:  map[string]string{"foo1": "bar1"},
+		Key:       opencdc.RawData("secret-key"),
+		Payload: opencdc.Change{
+			After: opencdc.StructuredData{"ssn": "123-45-6789", "card": "4111111111111111"},
+		},
+	}}
+}
+
+// TestDestination_Write_DefaultDoesNotLogPayload is the regression test for
+// GHSA-5c9c-5rf5-2r5q: by default neither key nor payload may reach the log.
+func TestDestination_Write_DefaultDoesNotLogPayload(t *testing.T) {
+	is := is.New(t)
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+	ctx := logger.WithContext(context.Background())
+
+	var dest Destination
+	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn"},
+		dest.Config(), Connector.NewSpecification().DestinationParams))
+	is.NoErr(dest.Open(ctx))
+
+	_, err := dest.Write(ctx, newTestRecords())
+	is.NoErr(err)
+
+	out := buf.String()
+	for _, leaked := range []string{"123-45-6789", "4111111111111111", "secret-key", "c2VjcmV0LWtleQ=="} {
+		is.True(!strings.Contains(out, leaked)) // default output must not contain record data
+	}
+	is.True(strings.Contains(out, `"position":"r1"`) || strings.Contains(out, `"position":"cjE="`))
+	is.True(strings.Contains(out, `"foo1":"bar1"`))
+	sum := sha256.Sum256([]byte("secret-key"))
+	is.True(strings.Contains(out, hex.EncodeToString(sum[:])))
+}
+
+func TestDestination_Write_PayloadOptIn(t *testing.T) {
+	is := is.New(t)
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+	ctx := logger.WithContext(context.Background())
+
+	var dest Destination
+	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn", "payload": "true"},
+		dest.Config(), Connector.NewSpecification().DestinationParams))
+	is.NoErr(dest.Open(ctx))
+
+	_, err := dest.Write(ctx, newTestRecords())
+	is.NoErr(err)
+	is.True(strings.Contains(buf.String(), "123-45-6789"))
 }
