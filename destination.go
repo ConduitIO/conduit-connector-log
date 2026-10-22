@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -139,13 +140,12 @@ func keyHash(r opencdc.Record) string {
 }
 
 // safeMetadataKeys are the metadata keys whose values are logged as they are:
-// timestamps, versions, names and ids that Conduit and the connectors set and
-// that do not carry record data. Every other key's value is dropped.
+// versions, names and ids that Conduit and the connectors set. Everything a
+// processor can set from the payload is NOT here: opencdc.collection is logged as
+// a salted hash, opencdc.createdAt and opencdc.readAt only when they are
+// integers, and every other key's value is dropped.
 var safeMetadataKeys = map[string]struct{}{
 	opencdc.MetadataOpenCDCVersion:                  {},
-	opencdc.MetadataCreatedAt:                       {},
-	opencdc.MetadataReadAt:                          {},
-	opencdc.MetadataCollection:                      {},
 	opencdc.MetadataConduitSourcePluginName:         {},
 	opencdc.MetadataConduitSourcePluginVersion:      {},
 	opencdc.MetadataConduitDestinationPluginName:    {},
@@ -154,14 +154,45 @@ var safeMetadataKeys = map[string]struct{}{
 	opencdc.MetadataConduitDLQNackNodeID:            {},
 }
 
-// goQualifier matches the start of a Go error such as "strconv.Atoi: parsing
-// ...": a lower-case package, a dot and an exported identifier.
-var goQualifier = regexp.MustCompile(`^[a-z][a-z0-9]*\.[A-Z][A-Za-z0-9]*$`)
+// maxQualifierLen caps what is logged of a nack error.
+const maxQualifierLen = 64
+
+// goPackages are the package names whose qualified identifier ("strconv.Atoi")
+// is logged for a nack error. Anything else, including a value that merely has
+// the shape "abc.Def: ...", is logged as a hash only.
+var goPackages = map[string]struct{}{
+	"strconv": {}, "json": {}, "fmt": {}, "os": {}, "io": {}, "net": {}, "url": {}, "time": {}, "errors": {},
+	"sql": {}, "context": {}, "bytes": {}, "strings": {}, "bufio": {}, "hex": {}, "base64": {}, "utf8": {},
+	"xml": {}, "csv": {}, "reflect": {}, "regexp": {}, "syscall": {}, "tls": {}, "x509": {}, "http": {},
+	"avro": {}, "proto": {}, "protojson": {}, "grpc": {}, "status": {}, "pgx": {}, "pgconn": {}, "kgo": {},
+	"kerr": {}, "sdk": {}, "opencdc": {}, "cerrors": {}, "pipeline": {}, "connector": {}, "processor": {},
+	"wasm": {}, "yaml": {}, "template": {}, "big": {}, "decimal": {},
+}
+
+// goQualifier matches a lower-case package, a dot and an exported identifier.
+var goQualifier = regexp.MustCompile(`^([a-z][a-z0-9]*)\.[A-Z][A-Za-z0-9]*$`)
+
+// nackErrorKind returns what may be logged of a DLQ nack error text: the Go
+// qualifier at its start (a known package, bounded length), or "redacted". The
+// text itself is never logged; it routinely echoes the value that failed.
+func nackErrorKind(text string) string {
+	head, _, ok := strings.Cut(text, ": ")
+	if !ok || len(head) > maxQualifierLen {
+		return "redacted"
+	}
+	m := goQualifier.FindStringSubmatch(head)
+	if m == nil {
+		return "redacted"
+	}
+	if _, known := goPackages[m[1]]; !known {
+		return "redacted"
+	}
+	return head
+}
 
 // safeMetadata returns the metadata that may be logged without payload: the
-// allowlisted keys with their values, a salted hash and the Go qualifier (never
-// the text) of the DLQ nack error, and the number of entries that were dropped.
-// The text of a nack error routinely echoes the value that failed to parse.
+// allowlisted keys with their values, hashes where the value can carry record
+// data, and the number of entries that were dropped.
 func safeMetadata(md map[string]string) *zerolog.Event {
 	keys := make([]string, 0, len(md))
 	for k := range md {
@@ -175,12 +206,16 @@ func safeMetadata(md map[string]string) *zerolog.Event {
 		v := md[k]
 		switch k {
 		case opencdc.MetadataConduitDLQNackError:
-			// Go type or code only, never the text.
-			kind := "redacted"
-			if head, _, ok := strings.Cut(v, ": "); ok && goQualifier.MatchString(head) {
-				kind = head
+			ev.Str(k, nackErrorKind(v)).Str(k+".hash", saltedHash([]byte(v)))
+		case opencdc.MetadataCollection:
+			// a processor can set the collection from the payload
+			ev.Str(k+".hash", saltedHash([]byte(v)))
+		case opencdc.MetadataCreatedAt, opencdc.MetadataReadAt:
+			if _, err := strconv.ParseInt(v, 10, 64); err == nil {
+				ev.Str(k, v)
+			} else {
+				ev.Str(k+".hash", saltedHash([]byte(v)))
 			}
-			ev.Str(k, kind).Str(k+".hash", saltedHash([]byte(v)))
 		default:
 			if _, ok := safeMetadataKeys[k]; ok {
 				ev.Str(k, v)
