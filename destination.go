@@ -173,8 +173,8 @@ func safeMetadata(md map[string]string) *zerolog.Event {
 	dropped := 0
 	for _, k := range keys {
 		v := md[k]
-		switch {
-		case k == opencdc.MetadataConduitDLQNackError:
+		switch k {
+		case opencdc.MetadataConduitDLQNackError:
 			// Go type or code only, never the text.
 			kind := "redacted"
 			if head, _, ok := strings.Cut(v, ": "); ok && goQualifier.MatchString(head) {
