@@ -154,6 +154,9 @@ var safeMetadataKeys = map[string]struct{}{
 	opencdc.MetadataConduitDLQNackNodeID:            {},
 }
 
+// redacted is logged where a value must not be.
+const redacted = "redacted"
+
 // maxQualifierLen caps what is logged of a nack error.
 const maxQualifierLen = 64
 
@@ -178,14 +181,14 @@ var goQualifier = regexp.MustCompile(`^([a-z][a-z0-9]*)\.[A-Z][A-Za-z0-9]*$`)
 func nackErrorKind(text string) string {
 	head, _, ok := strings.Cut(text, ": ")
 	if !ok || len(head) > maxQualifierLen {
-		return "redacted"
+		return redacted
 	}
 	m := goQualifier.FindStringSubmatch(head)
 	if m == nil {
-		return "redacted"
+		return redacted
 	}
 	if _, known := goPackages[m[1]]; !known {
-		return "redacted"
+		return redacted
 	}
 	return head
 }
