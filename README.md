@@ -19,20 +19,23 @@ connector starts: the same key or position gives the same hash during one run
 (so records can be correlated) and a different one after a restart, and a
 hash cannot be brute-forced offline from the logs alone.
 
-The metadata that is logged as it is: `opencdc.version`, `opencdc.createdAt`,
-`opencdc.readAt`, `opencdc.collection`, `conduit.source.plugin.name`,
-`conduit.source.plugin.version`, `conduit.destination.plugin.name`,
-`conduit.destination.plugin.version`, `conduit.source.connector.id` and
-`conduit.dlq.nack.node.id`. The value of every other key is dropped and only
-their number is logged (`dropped`). For `conduit.dlq.nack.error` the text is
-never logged, because error text often echoes the value that failed: only its
-leading Go qualifier such as `strconv.Atoi` (otherwise `redacted`) and a salted
-hash of the text are written.
+The metadata that is logged as it is: `opencdc.version`,
+`conduit.source.plugin.name`, `conduit.source.plugin.version`,
+`conduit.destination.plugin.name`, `conduit.destination.plugin.version`,
+`conduit.source.connector.id` and `conduit.dlq.nack.node.id`. Processors can
+set the collection and the timestamps from the payload, so `opencdc.collection`
+is logged as a salted hash (`opencdc.collection.hash`), and `opencdc.createdAt`
+and `opencdc.readAt` only when they are integers (otherwise as a hash). The
+value of every other key is dropped and only their number is logged
+(`dropped`). For `conduit.dlq.nack.error` the text is never logged, because
+error text often echoes the value that failed: only a Go qualifier of a known
+package such as `strconv.Atoi` (at most 64 characters, otherwise `redacted`)
+and a salted hash of the text are written.
 
 Example log message (default):
 
 ```
-{"level":"info","position_hash":"9c1f...","operation":"create","key_hash":"5f...","metadata":{"opencdc.version":"v1","opencdc.collection":"users","dropped":1}}
+{"level":"info","position_hash":"9c1f...","operation":"create","key_hash":"5f...","metadata":{"opencdc.version":"v1","opencdc.collection.hash":"c04e...","dropped":1}}
 ```
 
 Example log message with `payload: true`:

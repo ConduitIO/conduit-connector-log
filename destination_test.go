@@ -180,7 +180,7 @@ func TestDestination_Write_DefaultDoesNotLogPayload(t *testing.T) {
 		is.True(!strings.Contains(out, leaked)) // default output must not contain record data
 	}
 	// the safe identifiers are logged as they are
-	for _, kept := range []string{`"opencdc.readAt":"1700000000"`, `"opencdc.collection":"users"`, `"conduit.source.connector.id":"pipeline:src"`, `"conduit.dlq.nack.node.id":"n1"`} {
+	for _, kept := range []string{`"opencdc.readAt":"1700000000"`, `"opencdc.collection.hash":"` + saltedHash([]byte("users")) + `"`, `"conduit.source.connector.id":"pipeline:src"`, `"conduit.dlq.nack.node.id":"n1"`} {
 		is.True(strings.Contains(out, kept))
 	}
 	// the nack error: the Go qualifier only, plus a hash
@@ -196,7 +196,13 @@ func TestDestination_Write_NackErrorWithoutQualifierIsRedacted(t *testing.T) {
 	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn"}, dest.Config(), Connector.NewSpecification().DestinationParams))
 	is.NoErr(dest.Open(ctx))
 
-	for _, e := range []string{"SECRET-NUM-789: not found", "failed to parse SECRET-NUM-789", "SECRET-NUM-789"} {
+	long := "strconv." + strings.Repeat("A", 80) + ": SECRET-NUM-789"
+	for _, e := range []string{
+		"SECRET-NUM-789: not found", "failed to parse SECRET-NUM-789", "SECRET-NUM-789",
+		"abc.Def: SECRET-NUM-789",    // the shape of a qualifier, but not a known package
+		"user.Alice: SECRET-NUM-789", // an attacker-chosen value shaped like one
+		long,                         // a known package, but beyond the length cap
+	} {
 		buf.Reset()
 		_, err := dest.Write(ctx, []opencdc.Record{{Position: []byte("p"), Metadata: map[string]string{"conduit.dlq.nack.error": e}}})
 		is.NoErr(err)
@@ -261,4 +267,31 @@ func hmacWith(key, data []byte) string {
 	m := hmac.New(sha256.New, key)
 	m.Write(data)
 	return hex.EncodeToString(m.Sum(nil))
+}
+
+// The collection and the timestamps can be set by a processor from the payload.
+// The collection is only ever logged hashed, and a timestamp only if it is an
+// integer.
+func TestDestination_Write_PayloadDerivedMetadataIsNotLogged(t *testing.T) {
+	is := is.New(t)
+	var buf bytes.Buffer
+	ctx := zerolog.New(&buf).WithContext(context.Background())
+	var dest Destination
+	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn"}, dest.Config(), Connector.NewSpecification().DestinationParams))
+	is.NoErr(dest.Open(ctx))
+	buf.Reset()
+
+	_, err := dest.Write(ctx, []opencdc.Record{{Position: []byte("p"), Metadata: map[string]string{
+		"opencdc.collection": "SECRET-COLLECTION-4111",
+		"opencdc.createdAt":  "SECRET-CREATED-AT",
+		"opencdc.readAt":     "1700000000123",
+	}}})
+	is.NoErr(err)
+	out := buf.String()
+	for _, leaked := range []string{"SECRET-COLLECTION-4111", "SECRET-CREATED-AT"} {
+		is.True(!strings.Contains(out, leaked))
+	}
+	is.True(strings.Contains(out, `"opencdc.collection.hash":"`+saltedHash([]byte("SECRET-COLLECTION-4111"))+`"`))
+	is.True(strings.Contains(out, `"opencdc.createdAt.hash":"`+saltedHash([]byte("SECRET-CREATED-AT"))+`"`))
+	is.True(strings.Contains(out, `"opencdc.readAt":"1700000000123"`)) // an integer is fine
 }
