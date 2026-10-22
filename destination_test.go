@@ -18,7 +18,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -140,7 +142,8 @@ func newTestRecords() []opencdc.Record {
 }
 
 // TestDestination_Write_DefaultDoesNotLogPayload is the regression test for
-// GHSA-5c9c-5rf5-2r5q: by default neither key nor payload may reach the log.
+// GHSA-5c9c-5rf5-2r5q: by default neither key, payload, the raw position nor a
+// free-form metadata value may reach the log.
 func TestDestination_Write_DefaultDoesNotLogPayload(t *testing.T) {
 	is := is.New(t)
 
@@ -153,17 +156,88 @@ func TestDestination_Write_DefaultDoesNotLogPayload(t *testing.T) {
 		dest.Config(), Connector.NewSpecification().DestinationParams))
 	is.NoErr(dest.Open(ctx))
 
-	_, err := dest.Write(ctx, newTestRecords())
+	recs := newTestRecords()
+	recs[0].Position = []byte("pos-SECRET-POSITION")
+	recs[0].Metadata = map[string]string{
+		"foo1":                        "bar-SECRET-META",
+		"opencdc.readAt":              "1700000000",
+		"opencdc.collection":          "users",
+		"conduit.source.connector.id": "pipeline:src",
+		"conduit.dlq.nack.error":      `strconv.Atoi: parsing "SECRET-NUM-789": invalid syntax`,
+		"conduit.dlq.nack.node.id":    "n1",
+		"opencdc.file.name":           "SECRET-FILE-NAME",
+		"kafka.header.token":          "SECRET-TOKEN",
+	}
+	_, err := dest.Write(ctx, recs)
 	is.NoErr(err)
 
 	out := buf.String()
-	for _, leaked := range []string{"123-45-6789", "4111111111111111", "secret-key", "c2VjcmV0LWtleQ=="} {
+	for _, leaked := range []string{
+		"123-45-6789", "4111111111111111", "secret-key", "c2VjcmV0LWtleQ==",
+		"SECRET-POSITION", base64.StdEncoding.EncodeToString(recs[0].Position),
+		"SECRET-META", "SECRET-NUM-789", "SECRET-FILE-NAME", "SECRET-TOKEN",
+	} {
 		is.True(!strings.Contains(out, leaked)) // default output must not contain record data
 	}
-	is.True(strings.Contains(out, `"position":"r1"`) || strings.Contains(out, `"position":"cjE="`))
-	is.True(strings.Contains(out, `"foo1":"bar1"`))
-	sum := sha256.Sum256([]byte("secret-key"))
-	is.True(strings.Contains(out, hex.EncodeToString(sum[:])))
+	// the safe identifiers are logged as they are
+	for _, kept := range []string{`"opencdc.readAt":"1700000000"`, `"opencdc.collection":"users"`, `"conduit.source.connector.id":"pipeline:src"`, `"conduit.dlq.nack.node.id":"n1"`} {
+		is.True(strings.Contains(out, kept))
+	}
+	// the nack error: the Go qualifier only, plus a hash
+	is.True(strings.Contains(out, `"conduit.dlq.nack.error":"strconv.Atoi"`))
+	is.True(strings.Contains(out, `"dropped":3`)) // foo1, opencdc.file.name, kafka.header.token
+}
+
+func TestDestination_Write_NackErrorWithoutQualifierIsRedacted(t *testing.T) {
+	is := is.New(t)
+	var buf bytes.Buffer
+	ctx := zerolog.New(&buf).WithContext(context.Background())
+	var dest Destination
+	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn"}, dest.Config(), Connector.NewSpecification().DestinationParams))
+	is.NoErr(dest.Open(ctx))
+
+	for _, e := range []string{"SECRET-NUM-789: not found", "failed to parse SECRET-NUM-789", "SECRET-NUM-789"} {
+		buf.Reset()
+		_, err := dest.Write(ctx, []opencdc.Record{{Position: []byte("p"), Metadata: map[string]string{"conduit.dlq.nack.error": e}}})
+		is.NoErr(err)
+		is.True(!strings.Contains(buf.String(), "SECRET-NUM-789"))
+		is.True(strings.Contains(buf.String(), `"conduit.dlq.nack.error":"redacted"`))
+	}
+}
+
+// Hashes are salted: they are not the plain SHA-256 an attacker can compute
+// from a guessed key or position, they are stable inside one process (so
+// records can be correlated) and the salt is per process.
+func TestDestination_Write_HashesAreSalted(t *testing.T) {
+	is := is.New(t)
+	var buf bytes.Buffer
+	ctx := zerolog.New(&buf).WithContext(context.Background())
+	var dest Destination
+	is.NoErr(sdk.Util.ParseConfig(ctx, map[string]string{"level": "warn"}, dest.Config(), Connector.NewSpecification().DestinationParams))
+	is.NoErr(dest.Open(ctx))
+
+	buf.Reset() // drop the SDK's config debug lines
+	rec := opencdc.Record{Position: []byte("p1"), Key: opencdc.RawData("secret-key")}
+	_, err := dest.Write(ctx, []opencdc.Record{rec, rec})
+	is.NoErr(err)
+	out := buf.String()
+	plainKey := sha256.Sum256([]byte("secret-key"))
+	plainPos := sha256.Sum256([]byte("p1"))
+	is.True(!strings.Contains(out, hex.EncodeToString(plainKey[:])))
+	is.True(!strings.Contains(out, hex.EncodeToString(plainPos[:])))
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	is.Equal(len(lines), 2)
+	is.Equal(lines[0], lines[1]) // stable within the process
+	is.True(strings.Contains(lines[0], `"key_hash":"`+saltedHash([]byte("secret-key"))+`"`))
+	is.True(strings.Contains(lines[0], `"position_hash":"`+saltedHash([]byte("p1"))+`"`))
+
+	// another salt gives other hashes
+	old := salt
+	defer func() { salt = old }()
+	salt = bytes.Repeat([]byte{7}, 32)
+	is.True(saltedHash([]byte("p1")) != hex.EncodeToString(plainPos[:]))
+	is.True(saltedHash([]byte("p1")) != hmacWith(old, []byte("p1")))
 }
 
 func TestDestination_Write_PayloadOptIn(t *testing.T) {
@@ -181,4 +255,10 @@ func TestDestination_Write_PayloadOptIn(t *testing.T) {
 	_, err := dest.Write(ctx, newTestRecords())
 	is.NoErr(err)
 	is.True(strings.Contains(buf.String(), "123-45-6789"))
+}
+
+func hmacWith(key, data []byte) string {
+	m := hmac.New(sha256.New, key)
+	m.Write(data)
+	return hex.EncodeToString(m.Sum(nil))
 }

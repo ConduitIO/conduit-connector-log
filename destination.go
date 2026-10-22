@@ -16,10 +16,14 @@ package log
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -48,8 +52,9 @@ type DestinationConfig struct {
 	// Log the full record, including key and payload. Disabled by default
 	// because log output is commonly shipped to systems that are not
 	// authorized to read record data (the default Conduit DLQ writes through
-	// this connector). When disabled, only the position, operation, a SHA-256
-	// hash of the key and the metadata are logged.
+	// this connector). When disabled, only a salted hash of the position and
+	// of the key, the operation and an allowlist of safe metadata keys are
+	// logged; every other metadata value is dropped.
 	Payload bool `json:"payload" default:"false"`
 }
 
@@ -94,26 +99,100 @@ func (d *Destination) Write(ctx context.Context, records []opencdc.Record) (int,
 				Msg(d.config.Message)
 			continue
 		}
-		// Default: never write key or payload data (GHSA-5c9c-5rf5-2r5q).
+		// Default: never write key, payload or free-form metadata values
+		// (GHSA-5c9c-5rf5-2r5q). Only identifiers that are known to be safe are
+		// logged as they are; everything else is dropped or hashed.
 		logger.WithLevel(d.level).
-			Bytes("position", r.Position).
+			Str("position_hash", saltedHash(r.Position)).
 			Str("operation", r.Operation.String()).
-			Str("key_sha256", keyHash(r)).
-			Interface("metadata", r.Metadata).
+			Str("key_hash", keyHash(r)).
+			Dict("metadata", safeMetadata(r.Metadata)).
 			Msg(d.config.Message)
 	}
 	return len(records), nil
 }
 
-// keyHash returns the hex SHA-256 of the record key, or "" if there is no key.
-// The hash lets operators correlate records without exposing key contents.
-// Note that hashes of low-entropy keys can be brute-forced.
+// salt is random per process. Hashes are stable within one run, so records can
+// be correlated, and differ across runs, so a hash of a low-entropy key or
+// position cannot be brute-forced offline from logs alone.
+var salt = func() []byte {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Errorf("log connector: cannot read random bytes: %w", err))
+	}
+	return b
+}()
+
+// saltedHash returns the hex HMAC-SHA-256 of data under the process salt.
+func saltedHash(data []byte) string {
+	m := hmac.New(sha256.New, salt)
+	m.Write(data)
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// keyHash returns the salted hash of the record key, or "" if there is no key.
 func keyHash(r opencdc.Record) string {
 	if r.Key == nil {
 		return ""
 	}
-	sum := sha256.Sum256(r.Key.Bytes())
-	return hex.EncodeToString(sum[:])
+	return saltedHash(r.Key.Bytes())
+}
+
+// safeMetadataKeys are the metadata keys whose values are logged as they are:
+// timestamps, versions, names and ids that Conduit and the connectors set and
+// that do not carry record data. Every other key's value is dropped.
+var safeMetadataKeys = map[string]struct{}{
+	opencdc.MetadataOpenCDCVersion:                  {},
+	opencdc.MetadataCreatedAt:                       {},
+	opencdc.MetadataReadAt:                          {},
+	opencdc.MetadataCollection:                      {},
+	opencdc.MetadataConduitSourcePluginName:         {},
+	opencdc.MetadataConduitSourcePluginVersion:      {},
+	opencdc.MetadataConduitDestinationPluginName:    {},
+	opencdc.MetadataConduitDestinationPluginVersion: {},
+	opencdc.MetadataConduitSourceConnectorID:        {},
+	opencdc.MetadataConduitDLQNackNodeID:            {},
+}
+
+// goQualifier matches the start of a Go error such as "strconv.Atoi: parsing
+// ...": a lower-case package, a dot and an exported identifier.
+var goQualifier = regexp.MustCompile(`^[a-z][a-z0-9]*\.[A-Z][A-Za-z0-9]*$`)
+
+// safeMetadata returns the metadata that may be logged without payload: the
+// allowlisted keys with their values, a salted hash and the Go qualifier (never
+// the text) of the DLQ nack error, and the number of entries that were dropped.
+// The text of a nack error routinely echoes the value that failed to parse.
+func safeMetadata(md map[string]string) *zerolog.Event {
+	keys := make([]string, 0, len(md))
+	for k := range md {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	ev := zerolog.Dict()
+	dropped := 0
+	for _, k := range keys {
+		v := md[k]
+		switch {
+		case k == opencdc.MetadataConduitDLQNackError:
+			// Go type or code only, never the text.
+			kind := "redacted"
+			if head, _, ok := strings.Cut(v, ": "); ok && goQualifier.MatchString(head) {
+				kind = head
+			}
+			ev.Str(k, kind).Str(k+".hash", saltedHash([]byte(v)))
+		default:
+			if _, ok := safeMetadataKeys[k]; ok {
+				ev.Str(k, v)
+			} else {
+				dropped++
+			}
+		}
+	}
+	if dropped > 0 {
+		ev.Int("dropped", dropped)
+	}
+	return ev
 }
 
 func (d *Destination) Teardown(_ context.Context) error {
