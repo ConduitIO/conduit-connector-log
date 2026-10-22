@@ -7,16 +7,32 @@ A [Conduit](https://conduit.io) destination connector that simply logs records.
 
 The destination connector logs records using the built-in Conduit logger.
 
-By default a record is logged **without its key or payload**: only the position
-(base64 encoded), the operation, a SHA-256 hash of the key and the metadata are
-written. This keeps record data out of logs, which matters because Conduit's
-default dead-letter queue writes through this connector. Set `payload: true` to
-log the full record.
+By default a record is logged **without its key or payload**: only the
+operation, a salted hash of the position (`position_hash`), a salted hash of
+the key (`key_hash`) and an allowlist of metadata keys are written. This keeps
+record data out of logs, which matters because Conduit's default dead-letter
+queue writes through this connector. Set `payload: true` to log the full
+record.
+
+The hashes are HMAC-SHA-256 under a random salt that is generated when the
+connector starts: the same key or position gives the same hash during one run
+(so records can be correlated) and a different one after a restart, and a
+hash cannot be brute-forced offline from the logs alone.
+
+The metadata that is logged as it is: `opencdc.version`, `opencdc.createdAt`,
+`opencdc.readAt`, `opencdc.collection`, `conduit.source.plugin.name`,
+`conduit.source.plugin.version`, `conduit.destination.plugin.name`,
+`conduit.destination.plugin.version`, `conduit.source.connector.id` and
+`conduit.dlq.nack.node.id`. The value of every other key is dropped and only
+their number is logged (`dropped`). For `conduit.dlq.nack.error` the text is
+never logged, because error text often echoes the value that failed: only its
+leading Go qualifier such as `strconv.Atoi` (otherwise `redacted`) and a salted
+hash of the text are written.
 
 Example log message (default):
 
 ```
-{"level":"info","position":"cjI=","operation":"create","key_sha256":"5f...","metadata":{"foo":"bar","opencdc.version":"v1"}}
+{"level":"info","position_hash":"9c1f...","operation":"create","key_hash":"5f...","metadata":{"opencdc.version":"v1","opencdc.collection":"users","dropped":1}}
 ```
 
 Example log message with `payload: true`:
@@ -25,8 +41,9 @@ Example log message with `payload: true`:
 {"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
 ```
 
-With `payload: true`, the `position` field is base64 encoded, same goes for a key
-or payload that contains raw byte data.
+With `payload: true` the full record is logged as before: metadata unfiltered,
+and the `position` field is base64 encoded, same goes for a key or payload that
+contains raw byte data.
 
 Keep in mind that Conduit's log level needs to be configured lower or equal to
 the log level of the connector in order for the records to show up in the logs.
@@ -62,8 +79,9 @@ pipelines:
           # Log the full record, including key and payload. Disabled by default
           # because log output is commonly shipped to systems that are not
           # authorized to read record data (the default Conduit DLQ writes
-          # through this connector). When disabled, only the position,
-          # operation, a SHA-256 hash of the key and the metadata are logged.
+          # through this connector). When disabled, only a salted hash of the
+          # position and of the key, the operation and an allowlist of safe
+          # metadata keys are logged; every other metadata value is dropped.
           # Type: bool
           # Required: no
           payload: "false"
